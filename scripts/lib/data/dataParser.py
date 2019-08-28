@@ -7,19 +7,20 @@ import xml.etree.ElementTree as ET
 import mysql, mysql.connector
 import chardet
 
-hsFilePath = '../../../data/csvFiles/activities_HS.xlsx'
-cFilePath = '../../../data/csvFiles/activities_C.xlsx'
-CatFilePath = '../attributes.cat'
+hsFilePath = '../../../data/xlsxFiles/activities_HS.xlsx'
+cFilePath = '../../../data/xlsxFiles/activities_C.xlsx'
+hsCatFilePath = '../hsAttributes.cat'
+cCatFilePath = '../cAttributes.cat'
 
-def getAttr():
-    with open(CatFilePath, 'r') as f:
+def getAttr(catFilePath):
+    with open(catFilePath, 'r') as f:
         attrStr = f.readline()
         attr = attrStr.split(',')
         if('\n' in attr[-1]):
             attr[-1] = attr[-1].replace('\n', '')
         return attr
 
-def readCSV(filePath):
+def readCSV(filePath, CatFilePath):
     activities = []
     with open(filePath, 'r') as csvFile:
         csvReader = csv.reader(csvFile, delimiter = ',')
@@ -27,12 +28,13 @@ def readCSV(filePath):
             print(row)
     return activities
 
-def readXLSX(filePath):
+def readXLSX(filePath, catFilePath):
     xFile = pd.ExcelFile(filePath)
     xDataFrame = pd.read_excel(xFile)
-    columnToRemove = xDataFrame.columns.values[-3:]
-    xDataFrame = xDataFrame.drop(columnToRemove, axis = 1)
-    attrs = getAttr()
+    if('HS' in filePath):
+        columnToRemove = xDataFrame.columns.values[-3:]
+        xDataFrame = xDataFrame.drop(columnToRemove, axis = 1)
+    attrs = getAttr(catFilePath)
     activities = []
     for _, row in xDataFrame.iterrows():
         attrList = []
@@ -68,8 +70,6 @@ def readXLSX(filePath):
                     attr = attr.encode("utf-8")
                 if(chardet.detect(attr)['encoding'] == 'ascii'):
                     attr = attr.encode('utf-8')
-                    #attr = attr.encode('utf-8')
-                    #print(chardet.detect(attr)['encoding'])
                 if(chardet.detect(attr)['encoding'] != 'utf-8'):
                     attr = attr.decode(chardet.detect(attr)['encoding']).encode('utf-8')
                 attrList.append(attr)
@@ -78,8 +78,7 @@ def readXLSX(filePath):
     return attrs, activities
     
 
-def toSql(filePath, tableName):
-    print(sys.version)
+def toSql(filePath, tableName, catFilePath):
     horizDB = mysql.connector.connect(
         host="localhost",
         user="root",
@@ -89,15 +88,15 @@ def toSql(filePath, tableName):
         )
     dbCursor = horizDB.cursor()
 
-    createDBQuery = 'CREATE DATABASE IF NOT EXISTS {} DEFAULT CHARACTER SET gbk COLLATE gbk_chinese_ci'.format('HorizDB')
+    createDBQuery = 'CREATE DATABASE IF NOT EXISTS {}'.format('HorizDB')
     dbCursor.execute(createDBQuery)
 
     dbCursor.execute('USE {}'.format('HorizDB'))
 
     if('xlsx' in filePath):
-        attrs, activities = readXLSX(filePath)
+        attrs, activities = readXLSX(filePath, catFilePath)
     elif('csv' in filePath):
-        attrs, activities = readCSV(filePath)
+        attrs, activities = readCSV(filePath, catFilePath)
     else:
         raise Exception('error: unrecognized file type')
     
@@ -113,7 +112,7 @@ def toSql(filePath, tableName):
     createTableQuery += ', Priority INT)'
     dbCursor.execute(createTableQuery)
 
-    encodeQuery = 'ALTER TABLE HSContest CONVERT TO CHARACTER SET utf8 COLLATE utf8_unicode_ci'
+    encodeQuery = 'ALTER TABLE {} CONVERT TO CHARACTER SET utf8 COLLATE utf8_unicode_ci'.format(tableName)
     dbCursor.execute(encodeQuery)
 
     for activity in activities:
@@ -127,13 +126,11 @@ def toSql(filePath, tableName):
         )
         try:
             dbCursor.execute(insertQuery)
-            sys.stdout.flush()
         except:
             continue
     horizDB.commit()
-    print('Finished')
     
 if __name__ == "__main__":
-    toSql(hsFilePath, 'HSContest')
-    #toSql(cFilePath, 'CContest')
+    toSql(hsFilePath, 'HSContest', hsCatFilePath)
+    toSql(cFilePath, 'CContest', cCatFilePath)
 

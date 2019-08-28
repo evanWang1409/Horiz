@@ -6,6 +6,7 @@ import pandas as pd
 import xml.etree.ElementTree as ET
 import mysql, mysql.connector
 import chardet
+import tqdm
 
 hsFilePath = '../../../data/xlsxFiles/activities_HS.xlsx'
 cFilePath = '../../../data/xlsxFiles/activities_C.xlsx'
@@ -36,7 +37,8 @@ def readXLSX(filePath, catFilePath):
         xDataFrame = xDataFrame.drop(columnToRemove, axis = 1)
     attrs = getAttr(catFilePath)
     activities = []
-    for _, row in xDataFrame.iterrows():
+    print('REDING FROM XLSM')
+    for _, row in tqdm.tqdm(xDataFrame.iterrows()):
         attrList = []
         activityName = row['Name']
         try:
@@ -100,7 +102,7 @@ def toSql(filePath, tableName, catFilePath):
     else:
         raise Exception('error: unrecognized file type')
     
-    clearTableQuery = 'DROP TABLE IF EXISTS HSContest'
+    clearTableQuery = 'DROP TABLE IF EXISTS {}'.format(tableName)
     dbCursor.execute(clearTableQuery)
 
     createTableQuery = 'CREATE TABLE IF NOT EXISTS {} (Name VARCHAR(255) PRIMARY KEY'.format(tableName)
@@ -115,7 +117,8 @@ def toSql(filePath, tableName, catFilePath):
     encodeQuery = 'ALTER TABLE {} CONVERT TO CHARACTER SET utf8 COLLATE utf8_unicode_ci'.format(tableName)
     dbCursor.execute(encodeQuery)
 
-    for activity in activities:
+    print('WRITING TO DB')
+    for activity in tqdm.tqdm(activities):
         insertQuery = 'INSERT INTO {tableName} VALUES ({activityName}{valueStr})'
         valueStr = ", '{}'"*(len(activity[1]))
         valueStr = valueStr.format(*activity[1])
